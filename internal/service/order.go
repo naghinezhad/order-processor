@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/jinzhu/copier"
 	"github.com/naghinezhad/order-processor/internal/model"
 	"github.com/naghinezhad/order-processor/internal/redis"
 	"github.com/naghinezhad/order-processor/internal/repository"
@@ -16,10 +17,11 @@ import (
 
 var ErrDuplicateEvent = errors.New("duplicate event")
 var ErrLockNotAcquired = errors.New("lock not acquired")
+var ErrRequestNotFound = repository.ErrRequestNotFound
 
 // EventPublisher allows the API to publish Kafka events without importing the kafka package.
 type EventPublisher interface {
-	PublishOrderRequested(ctx context.Context, event *model.OrderRequestedEvent) (int, error)
+	PublishOrderRequested(ctx context.Context, event *model.OrderRequestedEvent) error
 }
 
 type OrderService struct {
@@ -50,36 +52,37 @@ func NewOrderService(
 	}
 }
 
-func (s *OrderService) CreateOrderRequest(ctx context.Context, userID string, productID string, quantity int) (*model.OrderRequest, error) {
+func (s *OrderService) CreateOrderRequest(ctx context.Context, input *model.CreateOrderInput) (*model.OrderRequest, error) {
 	if s.publisher == nil {
 		return nil, errors.New("publisher not configured")
 	}
+	if input == nil {
+		return nil, errors.New("input is required")
+	}
 
 	requestID := uuid.NewString()
-	request := &model.OrderRequest{
-		RequestID: requestID,
-		UserID:    userID,
-		ProductID: productID,
-		Quantity:  quantity,
-		Status:    model.StatusPending,
-		CreatedAt: time.Now().UTC(),
-		UpdatedAt: time.Now().UTC(),
+	request := &model.OrderRequest{}
+	if err := copier.Copy(request, input); err != nil {
+		return nil, err
 	}
+	request.RequestID = requestID
+	request.Status = model.StatusPending
+	request.CreatedAt = time.Now().UTC()
+	request.UpdatedAt = request.CreatedAt
 
 	if err := s.requests.Create(ctx, request); err != nil {
 		return nil, err
 	}
 
-	event := &model.OrderRequestedEvent{
-		EventID:   uuid.NewString(),
-		RequestID: requestID,
-		UserID:    userID,
-		ProductID: productID,
-		Quantity:  quantity,
-		CreatedAt: time.Now().UTC(),
+	event := &model.OrderRequestedEvent{}
+	if err := copier.Copy(event, input); err != nil {
+		return nil, err
 	}
+	event.EventID = uuid.NewString()
+	event.RequestID = requestID
+	event.CreatedAt = time.Now().UTC()
 
-	if _, err := s.publisher.PublishOrderRequested(ctx, event); err != nil {
+	if err := s.publisher.PublishOrderRequested(ctx, event); err != nil {
 		_ = s.requests.UpdateStatus(ctx, requestID, model.StatusFailed, nil)
 		return nil, err
 	}
@@ -89,6 +92,10 @@ func (s *OrderService) CreateOrderRequest(ctx context.Context, userID string, pr
 
 func (s *OrderService) GetRequestStatus(ctx context.Context, requestID string) (*model.OrderRequest, error) {
 	return s.requests.GetByID(ctx, requestID)
+}
+
+func (s *OrderService) GetRequestStatusByOrderID(ctx context.Context, orderID int64) (*model.OrderRequest, error) {
+	return s.requests.GetByOrderID(ctx, orderID)
 }
 
 func (s *OrderService) ProcessEvent(ctx context.Context, event *model.OrderRequestedEvent) error {
@@ -130,7 +137,7 @@ func (s *OrderService) ProcessEvent(ctx context.Context, event *model.OrderReque
 	requestRepo := repository.NewRequestRepository(tx)
 	orderRepo := repository.NewOrderRepository(tx)
 
-	inserted, err := requestRepo.InsertProcessedEvent(ctx, event.EventID, event.RequestID)
+	inserted, err := requestRepo.InsertProcessedEvent(ctx, event.RequestID, event.EventID)
 	if err != nil {
 		return err
 	}

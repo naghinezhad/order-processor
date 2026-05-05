@@ -10,6 +10,7 @@ import (
 	"github.com/naghinezhad/order-processor/internal/redis"
 	"github.com/naghinezhad/order-processor/internal/service"
 	"github.com/naghinezhad/order-processor/internal/utils/logger"
+	kafkago "github.com/segmentio/kafka-go"
 	"go.uber.org/zap"
 )
 
@@ -38,6 +39,13 @@ func main() {
 		logger.Log,
 	)
 
+	dltWriter := &kafkago.Writer{
+		Addr:         kafkago.TCP(cfg.KafkaBrokers...),
+		Topic:        cfg.KafkaDLTTopic,
+		RequiredAcks: kafkago.RequireOne,
+	}
+	defer dltWriter.Close()
+
 	consumer := kafka.NewConsumer(
 		cfg.KafkaBrokers,
 		cfg.KafkaTopic,
@@ -45,6 +53,7 @@ func main() {
 		cfg.ConsumerID,
 		logger.Log,
 		orderService.ProcessEvent,
+		dltWriter,
 	)
 	defer consumer.Close()
 

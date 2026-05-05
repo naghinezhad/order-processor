@@ -13,9 +13,9 @@ type Config struct {
 	RedisPass             string
 	KafkaBrokers          []string
 	KafkaTopic            string
+	KafkaDLTTopic         string
 	ConsumerGroupID       string
 	ConsumerID            string
-	PartitionCount        int
 	LockTTLSeconds        int
 	RequestTimeoutSeconds int
 }
@@ -27,9 +27,9 @@ func LoadConfig() *Config {
 	redisPass := os.Getenv("REDIS_PASS")
 	kafkaBrokers := splitCSV(getEnv("KAFKA_BROKERS", "localhost:9092"))
 	kafkaTopic := getEnv("KAFKA_TOPIC", "order-requested")
+	kafkaDLTTopic := getEnv("KAFKA_DLT_TOPIC", "order-requested-dlt")
 	consumerGroupID := getEnv("CONSUMER_GROUP_ID", "order-processor")
 	consumerID := getEnv("CONSUMER_ID", "consumer-1")
-	partitionCount := getEnvInt("KAFKA_PARTITIONS", 3)
 	lockTTLSeconds := getEnvInt("LOCK_TTL_SECONDS", 30)
 	requestTimeoutSeconds := getEnvInt("REQUEST_TIMEOUT_SECONDS", 5)
 
@@ -40,9 +40,9 @@ func LoadConfig() *Config {
 		RedisPass:             redisPass,
 		KafkaBrokers:          kafkaBrokers,
 		KafkaTopic:            kafkaTopic,
+		KafkaDLTTopic:         kafkaDLTTopic,
 		ConsumerGroupID:       consumerGroupID,
 		ConsumerID:            consumerID,
-		PartitionCount:        partitionCount,
 		LockTTLSeconds:        lockTTLSeconds,
 		RequestTimeoutSeconds: requestTimeoutSeconds,
 	}

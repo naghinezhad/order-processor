@@ -5,15 +5,22 @@ This service exposes a fast HTTP API for order requests, publishes events to Kaf
 
 ## Architecture
 - API: `POST /api/orders` creates a request and publishes `order-requested` events.
+- Status API: `GET /api/orders/:orderId` (by orderId) and `GET /api/orders/requests/:requestId` (by requestId).
 - Consumer: reads events, logs partition, acquires Redis lock, checks idempotency, creates order, updates request status.
 - Database: PostgreSQL tables for `order_requests`, `orders`, `processed_events`.
-- Kafka: topic `order-requested` with exactly 3 partitions.
+- Kafka: topic `order-requested` with exactly 3 partitions; dead-letter topic `order-requested-dlt`.
 
 ## Setup
 1. Start infra:
    ```bash
    docker compose -f docker/docker-compose.yml up -d
    ```
+  Create dead-letter topic (one-time):
+  ```bash
+  docker exec -it order-processor-kafka-1 \
+    kafka-topics.sh --bootstrap-server kafka:9093 --create --if-not-exists \
+    --topic order-requested-dlt --partitions 3 --replication-factor 1
+  ```
 2. Install Go dependencies:
    ```bash
    go mod tidy
@@ -52,7 +59,7 @@ Response:
 ```
 
 ### Get request status
-`GET /api/orders/requests/{requestId}`
+`GET /api/orders/:orderId`
 Response (pending):
 ```json
 {
@@ -68,6 +75,9 @@ Response (completed):
   "orderId": 123
 }
 ```
+
+`GET /api/orders/requests/{requestId}`
+Response is identical to the orderId endpoint.
 
 ## Required Tests (Expected Results)
 > The following commands show how to validate the requirements and the expected log/response patterns.
@@ -87,6 +97,7 @@ Expected:
 ### Test 2: Get status
 ```bash
 curl http://localhost:8080/api/orders/requests/{requestId}
+curl http://localhost:8080/api/orders/{orderId}
 ```
 Expected:
 - `status=COMPLETED` with `orderId`.
@@ -134,6 +145,8 @@ lock released for request
 Only one order is created.
 
 ## Notes
-- The Kafka producer uses a random partition (0..2) for each event.
+- The Kafka producer uses a round-robin balancer across partitions.
 - Ordering is only guaranteed within a single partition.
 - Consumer group rebalances partitions across instances.
+- Idempotency is enforced by `request_id` in `processed_events`.
+- Failed events are sent to the dead-letter topic and then committed.

@@ -19,8 +19,8 @@ CREATE TABLE IF NOT EXISTS orders (
 );
 
 CREATE TABLE IF NOT EXISTS processed_events (
-  event_id UUID PRIMARY KEY,
-  request_id UUID NOT NULL,
+  request_id UUID PRIMARY KEY,
+  event_id UUID NOT NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 

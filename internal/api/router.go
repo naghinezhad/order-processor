@@ -13,7 +13,8 @@ func SetupRouter(orderService *service.OrderService, logger *zap.Logger) *gin.En
 	orderHandler := handler.NewOrderHandler(orderService, logger)
 
 	r.POST("/api/orders", orderHandler.CreateOrder)
-	r.GET("/api/orders/requests/:requestId", orderHandler.GetRequestStatus)
+	r.GET("/api/orders/:orderId", orderHandler.GetRequestStatus)
+	r.GET("/api/orders/requests/:requestId", orderHandler.GetRequestStatusByRequestID)
 
 	return r
 }

@@ -13,6 +13,8 @@ type RequestRepository struct {
 	db DBTX
 }
 
+var ErrRequestNotFound = errors.New("request not found")
+
 func NewRequestRepository(db DBTX) *RequestRepository {
 	return &RequestRepository{db: db}
 }
@@ -36,7 +38,7 @@ func (r *RequestRepository) UpdateStatus(ctx context.Context, requestID string, 
 	}
 
 	if tag.RowsAffected() == 0 {
-		return errors.New("request not found")
+		return ErrRequestNotFound
 	}
 
 	return nil
@@ -62,7 +64,7 @@ func (r *RequestRepository) GetByID(ctx context.Context, requestID string) (*mod
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, errors.New("request not found")
+			return nil, ErrRequestNotFound
 		}
 		return nil, err
 	}
@@ -71,12 +73,41 @@ func (r *RequestRepository) GetByID(ctx context.Context, requestID string) (*mod
 	return &req, nil
 }
 
-func (r *RequestRepository) InsertProcessedEvent(ctx context.Context, eventID string, requestID string) (bool, error) {
+func (r *RequestRepository) GetByOrderID(ctx context.Context, orderID int64) (*model.OrderRequest, error) {
+	var req model.OrderRequest
+	var dbOrderID *int64
+
+	err := r.db.QueryRow(ctx, `
+		SELECT request_id, user_id, product_id, quantity, status, order_id, created_at, updated_at
+		FROM order_requests
+		WHERE order_id = $1
+	`, orderID).Scan(
+		&req.RequestID,
+		&req.UserID,
+		&req.ProductID,
+		&req.Quantity,
+		&req.Status,
+		&dbOrderID,
+		&req.CreatedAt,
+		&req.UpdatedAt,
+	)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrRequestNotFound
+		}
+		return nil, err
+	}
+
+	req.OrderID = dbOrderID
+	return &req, nil
+}
+
+func (r *RequestRepository) InsertProcessedEvent(ctx context.Context, requestID string, eventID string) (bool, error) {
 	tag, err := r.db.Exec(ctx, `
-		INSERT INTO processed_events (event_id, request_id)
+		INSERT INTO processed_events (request_id, event_id)
 		VALUES ($1, $2)
-		ON CONFLICT DO NOTHING
-	`, eventID, requestID)
+		ON CONFLICT (request_id) DO NOTHING
+	`, requestID, eventID)
 	if err != nil {
 		return false, err
 	}

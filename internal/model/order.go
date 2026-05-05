@@ -18,3 +18,9 @@ type OrderRequest struct {
 	CreatedAt time.Time `json:"createdAt"`
 	UpdatedAt time.Time `json:"updatedAt"`
 }
+
+type CreateOrderInput struct {
+	UserID    string `json:"userId" binding:"required"`
+	ProductID string `json:"productId" binding:"required"`
+	Quantity  int    `json:"quantity" binding:"required"`
+}

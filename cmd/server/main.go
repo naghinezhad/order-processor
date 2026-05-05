@@ -43,7 +43,7 @@ func main() {
 		logger.Log.Fatal("failed to connect to redis", zap.Error(err))
 	}
 
-	producer := kafka.NewProducer(cfg.KafkaBrokers, cfg.KafkaTopic, cfg.PartitionCount, logger.Log)
+	producer := kafka.NewProducer(cfg.KafkaBrokers, cfg.KafkaTopic, logger.Log)
 	defer producer.Close()
 
 	orderService := service.NewOrderService(

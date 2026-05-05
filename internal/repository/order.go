@@ -18,13 +18,13 @@ func NewOrderRepository(db DBTX) *OrderRepository {
 func (r *OrderRepository) Create(ctx context.Context, event *model.OrderRequestedEvent) (int64, error) {
 	var id int64
 	query := `
-		INSERT INTO orders (request_id, user_id, product_id, quantity)
-		VALUES ($1, $2, $3, $4)
+		INSERT INTO orders (request_id, user_id, product_id, quantity, created_at)
+		VALUES ($1, $2, $3, $4, $5)
 		ON CONFLICT (request_id) DO NOTHING
 		RETURNING id
 	`
 
-	err := r.db.QueryRow(ctx, query, event.RequestID, event.UserID, event.ProductID, event.Quantity).Scan(&id)
+	err := r.db.QueryRow(ctx, query, event.RequestID, event.UserID, event.ProductID, event.Quantity, event.CreatedAt).Scan(&id)
 	if err == nil {
 		return id, nil
 	}
